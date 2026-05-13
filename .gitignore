@@ -1,0 +1,77 @@
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# =========================
+# Virtual Environment
+# =========================
+venv/
+.venv/
+env/
+
+# =========================
+# VSCode
+# =========================
+.vscode/
+
+# =========================
+# Environment Variables
+# =========================
+.env
+.env.*
+
+# =========================
+# Logs
+# =========================
+logs/
+*.log
+
+data/logs/
+
+# Airflow logs
+airflow/logs/
+
+
+# =========================
+# Data
+# =========================
+data/raw/
+data/processed/
+data/build/
+data/others/
+# =========================
+# ML Models
+# =========================
+data/models/
+models/
+
+*.bin
+*.pt
+*.pth
+*.onnx
+*.ckpt
+*.pkl
+*.joblib
+
+# =========================
+# Cache
+# =========================
+.cache/
+.pytest_cache/
+
+# =========================
+# Jupyter
+# =========================
+.ipynb_checkpoints/
+
+# =========================
+# OS Files
+# =========================
+Thumbs.db
+.DS_Store
+
+
+test/

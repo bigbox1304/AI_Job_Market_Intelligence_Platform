@@ -1,0 +1,14 @@
+tqdm
+pandas
+beautifulsoup4
+psycopg2-binary
+fastapi
+uvicorn
+streamlit
+redis
+requests
+python-jose[cryptography]
+matplotlib
+orjson
+faiss-cpu
+sentence-transformers

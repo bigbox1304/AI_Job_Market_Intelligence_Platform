@@ -1,0 +1,150 @@
+
+name: job_recommendation
+
+x-airflow-common: &airflow-common
+  build: .
+  image: job-recommendation-airflow:latest
+  environment: &airflow-common-env
+    # ================== Airflow Core ==================
+    AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+    AIRFLOW__CORE__DEFAULT_TIMEZONE: Asia/Ho_Chi_Minh
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__FERNET_KEY: ""
+
+    # ================== Database (Airflow metadata) ==================
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+
+    # ================== Celery (Redis) ==================
+    AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/0
+    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres/airflow
+
+    # ================== Biến RIÊNG cho pipeline job của bạn ==================
+    # Những biến này KHÔNG được để chung với prefix AIRFLOW__
+    JOB_DB_USER: ${JOB_DB_USER}
+    JOB_DB_PASS: ${JOB_DB_PASS}
+    JOB_DB_NAME: ${JOB_DB_NAME}
+    JOB_DB_PORT: 5432
+
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./logs:/opt/airflow/logs
+    - ./plugins:/opt/airflow/plugins
+    - .:/opt/airflow/project
+
+  depends_on:
+    redis:
+      condition: service_healthy
+    postgres:
+      condition: service_healthy
+    job-postgres:
+      condition: service_healthy
+
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres-db-volume:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      retries: 5
+
+  job-postgres:
+    image: postgres:16-alpine
+    container_name: job-recommendation-postgres
+    environment:
+      POSTGRES_USER: ${JOB_DB_USER:-jobuser}
+      POSTGRES_PASSWORD: ${JOB_DB_PASS:-jobpass123}
+      POSTGRES_DB: ${JOB_DB_NAME:-jobdb}
+    volumes:
+      - job-postgres-data:/var/lib/postgresql/data
+      - ./initdb:/docker-entrypoint-initdb.d
+    ports:
+      - "${JOB_DB_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${JOB_DB_USER:-jobuser} -d ${JOB_DB_NAME:-jobdb}"]
+      interval: 10s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      retries: 5
+
+  # ================== Airflow services ==================
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+
+  airflow-worker:
+    <<: *airflow-common
+    command: celery worker
+
+  airflow-triggerer:
+    <<: *airflow-common
+    command: triggerer
+
+ 
+  # Service init database cho Airflow (bắt buộc)
+  airflow-init:
+    <<: *airflow-common
+    command: >
+      bash -c "airflow db migrate && airflow users create --username airflow --firstname Admin --lastname User --role Admin --email admin@example.com --password airflow"
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+  api:
+    build: .
+    container_name: job-api
+    entrypoint: ""
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000
+    volumes:
+      - .:/opt/airflow/project
+    working_dir: /opt/airflow/project
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - redis
+      - ollama
+    environment:
+      - PYTHONPATH=/opt/airflow/project
+  frontend:
+    build: .
+    container_name: job-frontend
+    entrypoint: ""
+    command: streamlit run frontend/app.py --server.port 8501 --server.address 0.0.0.0
+    volumes:
+      - .:/opt/airflow/project
+    working_dir: /opt/airflow/project
+    ports:
+      - "8501:8501"
+    depends_on:
+      - api
+  ollama:
+    image: ollama/ollama
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama  
+volumes:
+  postgres-db-volume:
+  job-postgres-data:
+  ollama:
