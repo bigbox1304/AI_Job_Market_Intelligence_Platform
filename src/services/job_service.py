@@ -51,7 +51,7 @@ class JobService:
         if not job_ids:
             return []
 
-        jobs = self.repo.get_by_ids(job_ids)
+        jobs = self.repo.get_jobs_by_ids(job_ids)
 
         # giữ thứ tự theo FAISS trả về
         job_map = {job["job_id"]: job for job in jobs}

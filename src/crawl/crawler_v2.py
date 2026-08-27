@@ -244,6 +244,11 @@ def crawl():
     merge_daily_to_master()
 
     log("DONE")
+    return {
+        "collected_rows": len(jobs),
+        "new_rows": len(new_jobs),
+        "existing_rows": len(existing_urls),
+    }
 
 
 if __name__ == "__main__":

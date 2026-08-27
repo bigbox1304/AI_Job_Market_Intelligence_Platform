@@ -20,9 +20,9 @@ x-airflow-common: &airflow-common
 
     # ================== Biến RIÊNG cho pipeline job của bạn ==================
     # Những biến này KHÔNG được để chung với prefix AIRFLOW__
-    JOB_DB_USER: ${JOB_DB_USER}
-    JOB_DB_PASS: ${JOB_DB_PASS}
-    JOB_DB_NAME: ${JOB_DB_NAME}
+    JOB_DB_USER: ${JOB_DB_USER:-jobuser}
+    JOB_DB_PASS: ${JOB_DB_PASS:-jobpass123}
+    JOB_DB_NAME: ${JOB_DB_NAME:-jobdb}
     JOB_DB_PORT: 5432
 
   volumes:
@@ -124,7 +124,17 @@ services:
       - redis
       - ollama
     environment:
-      - PYTHONPATH=/opt/airflow/project
+      PYTHONPATH: /opt/airflow/project
+      JOB_DB_HOST: job-postgres
+      JOB_DB_INTERNAL_PORT: 5432
+      JOB_DB_USER: ${JOB_DB_USER:-jobuser}
+      JOB_DB_PASS: ${JOB_DB_PASS:-jobpass123}
+      JOB_DB_NAME: ${JOB_DB_NAME:-jobdb}
+      SECRET_KEY: ${SECRET_KEY:-dev-only-change-me}
+      SESSION_SECRET: ${SESSION_SECRET:-dev-only-change-me}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8501}
+      EMBEDDING_MODEL_PATH: ${EMBEDDING_MODEL_PATH:-./data/models/embedding_model}
+      RECOMMENDATION_MODEL_VERSION: ${RECOMMENDATION_MODEL_VERSION:-hybrid-v1}
   frontend:
     build: .
     container_name: job-frontend
@@ -137,6 +147,8 @@ services:
       - "8501:8501"
     depends_on:
       - api
+    environment:
+      API_URL: http://api:8000
   ollama:
     image: ollama/ollama
     container_name: ollama

@@ -4,8 +4,10 @@ import re
 from bs4 import BeautifulSoup
 from tqdm import tqdm
 import os
+from datetime import datetime
 
 from pathlib import Path
+from src.crawl.data_quality import build_quality_report, write_quality_report
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = BASE_DIR / "data"
@@ -156,20 +158,33 @@ def clean_data():
     print("Loading raw data...")
 
     data = []
+    invalid_rows = 0
 
     # dùng tqdm trực tiếp
     with open(INPUT_FILE, "r", encoding="utf-8") as f:
         for line in tqdm(f, desc="Loading lines"):
-            data.append(json.loads(line))
+            try:
+                data.append(json.loads(line))
+            except json.JSONDecodeError:
+                invalid_rows += 1
 
     df = pd.DataFrame(data)
 
     print("Initial shape:", df.shape)
 
+    expected_columns = [
+        "jobId", "jobTitle", "companyName", "industriesV3", "jobFunctionsV3",
+        "groupJobFunctionsV3", "workingLocations", "skills", "jobDescription",
+        "jobRequirement", "jobLevel", "yearsOfExperience", "salaryMin",
+        "salaryMax", "createdOn", "expiredOn", "url",
+    ]
+    for column in expected_columns:
+        if column not in df:
+            df[column] = None
+
+    before_dedup = len(df)
     df = df.drop_duplicates(subset=["jobId"], keep="first")
-
-    df = df.dropna(axis=1, how="all")
-
+    duplicate_rows = before_dedup - len(df)
 
     # ==============================
     # FLATTEN STRUCTURES
@@ -242,7 +257,10 @@ def clean_data():
         "jobRequirement",
         "yearsOfExperience",
         "createdOn",
-        "expiredOn"
+        "expiredOn",
+        "salaryMin",
+        "salaryMax",
+        "url",
     ]
 
     df_ml = df[selected_columns]
@@ -260,6 +278,16 @@ def clean_data():
     ]
 
     df_ml = df_ml.replace(r"^\s*$", pd.NA, regex=True)
+
+    quality_report = build_quality_report(
+        df_ml,
+        required_columns=required_cols,
+        source_rows=len(data),
+        invalid_rows=invalid_rows,
+        duplicate_rows=duplicate_rows,
+    )
+    report_path = write_quality_report(quality_report, DATA_DIR / "logs", datetime.now().strftime("%Y%m%d_%H%M%S"))
+    print("Quality report:", report_path)
 
     before = len(df_ml)
     df_ml = df_ml.dropna(subset=required_cols)
@@ -279,3 +307,4 @@ def clean_data():
 
     print("Saved:", OUTPUT_FILE)
     print("DONE")
+    return quality_report

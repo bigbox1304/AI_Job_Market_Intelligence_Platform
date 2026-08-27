@@ -6,23 +6,40 @@ sys.path.append("/opt/airflow/project")
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator
+from src.crawl.pipeline_monitor import record_pipeline_task
 
 
-def crawl_task():
+def run_stage(stage_name, stage_callable, context):
+    run_id = context["run_id"]
+    task_id = context["task_instance"].task_id
+    record_pipeline_task(run_id, "job_recommendation_pipeline", task_id, "running")
+    try:
+        result = stage_callable()
+        record_pipeline_task(run_id, "job_recommendation_pipeline", task_id, "success", {"result": str(result or "ok")})
+        return result
+    except Exception as exc:
+        record_pipeline_task(run_id, "job_recommendation_pipeline", task_id, "failed", {"error": str(exc)})
+        raise
+
+
+def crawl_task(**context):
     from src.crawl.crawler_v2 import crawl
-    crawl()
+    return run_stage("crawl_jobs", crawl, context)
 
-def clean_task():
+
+def clean_task(**context):
     from src.crawl.clean_crawl_raw import clean_data
-    clean_data()
+    return run_stage("clean_jobs", clean_data, context)
 
-def to_db_task():
+
+def to_db_task(**context):
     from src.crawl.to_database import insert_to_db
-    insert_to_db()
+    return run_stage("load_to_database", insert_to_db, context)
 
-def train_task():
+
+def train_task(**context):
     from src.train.train_skill_aware_model import train_embeddings
-    train_embeddings()
+    return run_stage("train_model", train_embeddings, context)
 
 
 default_args = {

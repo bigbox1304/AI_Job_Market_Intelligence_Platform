@@ -1,9 +1,10 @@
 from datetime import datetime, timedelta
 from jose import jwt
 import secrets
+import os
 
 
-SECRET_KEY = "your-secret-key"
+SECRET_KEY = os.getenv("SECRET_KEY") or "dev-only-change-me"
 ALGORITHM = "HS256"
 EXPIRE_MINUTES = 60 * 24
 

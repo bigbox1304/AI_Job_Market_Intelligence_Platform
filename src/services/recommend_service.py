@@ -8,6 +8,8 @@ from src.services.analytics_service import AnalyticsService
 from functools import lru_cache
 from src.ml.ollama_service import OllamaService
 from src.services.llm_prompt_service import LLMPromptService
+from src.services.career_fit_service import CareerFitService
+from src.services.recommendation_engine import RecommendationEngine
 from src.core.redis import cache_get, cache_set
 import hashlib
 
@@ -24,6 +26,8 @@ class RecommendService:
         self.analytics_service = AnalyticsService()
         self.ollama_service = OllamaService()
         self.prompt_service = LLMPromptService()
+        self.career_fit_service = CareerFitService()
+        self.recommendation_engine = RecommendationEngine()
 
     # =========================================
     # 1. QUERY → RECOMMEND
@@ -49,6 +53,17 @@ class RecommendService:
 
         # attach score
         return self._attach_scores(jobs, job_ids, scores)
+
+    def recommend_ranked(self, query: str, top_k: int = 10, history_queries=None, behavior_events=None) -> List[Dict]:
+        """Return final recommendations after retrieval and hybrid reranking."""
+        candidate_k = min(max(top_k * 3, top_k), 100)
+        candidates = self.recommend_by_query(query, candidate_k)
+        return self.recommendation_engine.rank(
+            query,
+            candidates,
+            history_queries=history_queries,
+            behavior_events=behavior_events,
+        )[:top_k]
 
     # =========================================
     # 2. JOB → SIMILAR JOBS
@@ -101,7 +116,7 @@ class RecommendService:
             if len(results) >= top_k:
                 break
 
-        return results
+        return self.recommendation_engine.rank(query, results)[:top_k]
 
     # =========================================
     # UTILS
@@ -144,6 +159,7 @@ class RecommendService:
             return cached
 
         jobs = self.recommend_by_query(query, top_k)
+        jobs, career_fit = self.career_fit_service.analyze(query, jobs)
 
         insights = self.analytics_service.analyze(jobs)
 
@@ -159,6 +175,7 @@ class RecommendService:
             "count": len(jobs),
             "results": jobs,
             "analytics": insights,
+            "career_fit": career_fit,
             "ai_summary": ai_summary
         }
 
@@ -168,9 +185,22 @@ class RecommendService:
     # =========================================
     # FAST (NO LLM)
     # =========================================
-    def recommend_without_llm(self, query: str, top_k: int = 10):
+    def recommend_without_llm(
+        self,
+        query: str,
+        top_k: int = 10,
+        history_queries=None,
+        behavior_events=None,
+    ):
 
-        jobs = self.recommend_by_query(query, top_k)
+        ranked_jobs = self.recommend_ranked(
+            query,
+            top_k=top_k,
+            history_queries=history_queries,
+            behavior_events=behavior_events,
+        )
+        jobs = ranked_jobs
+        jobs, career_fit = self.career_fit_service.analyze(query, jobs)
         insights = self.analytics_service.analyze(jobs)
 
         return {
@@ -178,6 +208,7 @@ class RecommendService:
             "count": len(jobs),
             "results": jobs,
             "analytics": insights,
+            "career_fit": career_fit,
             "ai_summary": None
         }
 

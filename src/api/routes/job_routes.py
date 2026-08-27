@@ -11,7 +11,7 @@ router = APIRouter()
 # =========================================
 # 1. GET JOB BY ID
 # =========================================
-@router.get("/{job_id}")
+@router.get("/{job_id:int}")
 def get_job(
     job_id: int,
     service: JobService = Depends(get_job_service)

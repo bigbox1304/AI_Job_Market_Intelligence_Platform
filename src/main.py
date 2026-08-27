@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import ORJSONResponse
 from src.middleware.auth_middleware import AuthMiddleware
+import os
 
 
 # import routers
@@ -12,6 +13,7 @@ from src.api.routes.recommend_routes import router as recommend_router
 from src.api.routes.auth_google_routes import router as google_auth_router
 from starlette.middleware.sessions import SessionMiddleware
 from src.api.routes.history_routes import router as history_router
+from src.api.routes.event_routes import router as event_router
 
 # =========================================
 # INIT APP (ORJSON)
@@ -31,7 +33,7 @@ app = FastAPI(
 
 app.add_middleware(
     SessionMiddleware,
-    secret_key="super-secret-session-key"
+    secret_key=os.getenv("SESSION_SECRET", os.getenv("SECRET_KEY", "dev-only-change-me"))
 )
 
 app.add_middleware(
@@ -46,7 +48,7 @@ app.add_middleware(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[origin.strip() for origin in os.getenv("CORS_ORIGINS", "http://localhost:8501").split(",") if origin.strip()],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -100,6 +102,12 @@ app.include_router(
     history_router,
     prefix="/history",
     tags=["History"]
+)
+
+app.include_router(
+    event_router,
+    prefix="/events",
+    tags=["Behavior Events"]
 )
 
 # =========================================

@@ -18,6 +18,9 @@ class JobRepository:
             j.job_level,
             j.city,
             j.years_of_experience,
+            j.created_on,
+            j.expired_on,
+            j.is_active,
             j.job_description,
             j.job_requirement,
             STRING_AGG(s.skill_name, ', ') AS skills
@@ -25,6 +28,8 @@ class JobRepository:
         LEFT JOIN job_skills js ON j.job_id = js.job_id
         LEFT JOIN skills s ON js.skill_id = s.skill_id
         WHERE j.job_id = %s
+          AND j.is_active = TRUE
+          AND (j.expired_on IS NULL OR j.expired_on >= CURRENT_TIMESTAMP)
         GROUP BY j.job_id
         """
 
@@ -47,13 +52,19 @@ class JobRepository:
             j.job_level,
             j.city,
             j.years_of_experience,
+            j.created_on,
+            j.expired_on,
+            j.is_active,
             STRING_AGG(s.skill_name, ', ') AS skills
         FROM jobs j
         LEFT JOIN job_skills js ON j.job_id = js.job_id
         LEFT JOIN skills s ON js.skill_id = s.skill_id
-        WHERE
+        WHERE j.is_active = TRUE
+          AND (j.expired_on IS NULL OR j.expired_on >= CURRENT_TIMESTAMP)
+          AND (
             j.job_title ILIKE %s OR
             j.job_requirement ILIKE %s
+          )
         GROUP BY j.job_id
         ORDER BY j.job_id DESC
         LIMIT %s
@@ -78,7 +89,10 @@ class JobRepository:
         limit: int = 20
     ) -> List[Dict]:
 
-        conditions = []
+        conditions = [
+            "j.is_active = TRUE",
+            "(j.expired_on IS NULL OR j.expired_on >= CURRENT_TIMESTAMP)",
+        ]
         params = []
 
         if city:
@@ -106,6 +120,9 @@ class JobRepository:
             j.job_level,
             j.city,
             j.years_of_experience,
+            j.created_on,
+            j.expired_on,
+            j.is_active,
             STRING_AGG(s.skill_name, ', ') AS skills
         FROM jobs j
         LEFT JOIN job_skills js ON j.job_id = js.job_id
@@ -140,11 +157,16 @@ class JobRepository:
             j.job_level,
             j.city,
             j.years_of_experience,
+            j.created_on,
+            j.expired_on,
+            j.is_active,
             STRING_AGG(s.skill_name, ', ') AS skills
         FROM jobs j
         LEFT JOIN job_skills js ON j.job_id = js.job_id
         LEFT JOIN skills s ON js.skill_id = s.skill_id
         WHERE j.job_id = ANY(%s)
+          AND j.is_active = TRUE
+          AND (j.expired_on IS NULL OR j.expired_on >= CURRENT_TIMESTAMP)
         GROUP BY j.job_id
         """
 

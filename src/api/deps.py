@@ -8,6 +8,8 @@ from src.ml.faiss_service import FaissService
 from src.ml.embedding_service import EmbeddingService
 from src.repositories.search_history_repository import SearchHistoryRepository
 from src.services.search_history_service import SearchHistoryService
+from src.repositories.job_event_repository import JobEventRepository
+from src.services.job_event_service import JobEventService
 
 # =========================================
 # DB
@@ -45,3 +47,8 @@ def get_recommend_service(conn = Depends(get_db_dep)):
 def get_history_service(conn = Depends(get_db_dep)):
     repo = SearchHistoryRepository(conn)
     return SearchHistoryService(repo)
+
+
+def get_job_event_service(conn = Depends(get_db_dep)):
+    repo = JobEventRepository(conn)
+    return JobEventService(repo)

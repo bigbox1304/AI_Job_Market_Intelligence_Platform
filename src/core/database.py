@@ -12,7 +12,7 @@ DB_CONFIG = {
     "database": os.getenv("JOB_DB_NAME", "jobdb"),
     "user": os.getenv("JOB_DB_USER", "jobuser"),
     "password": os.getenv("JOB_DB_PASS", "jobpass123"),
-    "port": int(os.getenv("JOB_DB_PORT", 5432)),
+    "port": int(os.getenv("JOB_DB_INTERNAL_PORT", os.getenv("JOB_DB_PORT", 5432))),
 }
 
 # =========================================

@@ -4,6 +4,7 @@ from src.core.database import get_db, release_db
 
 def insert_to_db():
     conn = None
+    metrics = {}
 
     try:
         conn = get_db()
@@ -66,7 +67,11 @@ def insert_to_db():
                 row["jobRequirement"],
                 row["yearsOfExperience"],
                 row["createdOn"],
-                row["expiredOn"]
+                row["expiredOn"],
+                row["salaryMin"] or None,
+                row["salaryMax"] or None,
+                "vietnamworks",
+                row["url"] or None,
             ))
 
         execute_values(
@@ -84,13 +89,49 @@ def insert_to_db():
                 job_description,
                 job_requirement,
                 years_of_experience,
+                salary_min,
+                salary_max,
+                source,
+                source_url,
                 created_on,
                 expired_on
             ) VALUES %s
-            ON CONFLICT (job_id) DO NOTHING
+            ON CONFLICT (job_id) DO UPDATE SET
+                job_title = EXCLUDED.job_title,
+                company_id = EXCLUDED.company_id,
+                industry = EXCLUDED.industry,
+                job_function = EXCLUDED.job_function,
+                job_group = EXCLUDED.job_group,
+                job_level = EXCLUDED.job_level,
+                city = EXCLUDED.city,
+                job_description = EXCLUDED.job_description,
+                job_requirement = EXCLUDED.job_requirement,
+                years_of_experience = EXCLUDED.years_of_experience,
+                salary_min = EXCLUDED.salary_min,
+                salary_max = EXCLUDED.salary_max,
+                source = EXCLUDED.source,
+                source_url = EXCLUDED.source_url,
+                created_on = EXCLUDED.created_on,
+                expired_on = EXCLUDED.expired_on,
+                last_seen_at = CURRENT_TIMESTAMP,
+                is_active = TRUE
             """,
             jobs_data
         )
+
+        cursor.execute(
+            """
+            UPDATE jobs
+            SET is_active = FALSE
+            WHERE expired_on IS NOT NULL AND expired_on < CURRENT_TIMESTAMP
+            """
+        )
+
+        cursor.execute("SELECT COUNT(*) FROM jobs WHERE is_active = TRUE")
+        metrics = {
+            "loaded_rows": int(len(df)),
+            "active_jobs": int(cursor.fetchone()[0]),
+        }
 
         # ---------- extract skills ----------
         skill_set = set()
@@ -125,6 +166,10 @@ def insert_to_db():
         # ---------- job_skills ----------
         job_skills_data = []
 
+        job_ids = [int(job_id) for job_id in df["jobId"].tolist()]
+        if job_ids:
+            cursor.execute("DELETE FROM job_skills WHERE job_id = ANY(%s)", (job_ids,))
+
         for job_id, skill_name in job_skill_map:
             skill_id = skill_map.get(skill_name)
             if skill_id:
@@ -154,3 +199,4 @@ def insert_to_db():
             release_db(conn)
 
     print("ETL Completed Successfully")
+    return metrics

@@ -1,5 +1,6 @@
 import os
 import pickle
+import json
 from datetime import datetime
 import pandas as pd
 import numpy as np
@@ -9,6 +10,8 @@ from src.core.database import get_db, release_db
 
 MODEL_DIR = "data/models"
 os.makedirs(MODEL_DIR, exist_ok=True)
+MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "sentence-transformers/all-MiniLM-L6-v2")
+MODEL_VERSION = os.getenv("EMBEDDING_MODEL_VERSION", "all-minilm-l6-v2")
 
 def train_embeddings():
     # ==============================
@@ -32,6 +35,8 @@ def train_embeddings():
     FROM jobs j
     LEFT JOIN job_skills js ON j.job_id = js.job_id
     LEFT JOIN skills s ON js.skill_id = s.skill_id
+    WHERE j.is_active = TRUE
+      AND (j.expired_on IS NULL OR j.expired_on >= CURRENT_TIMESTAMP)
     GROUP BY j.job_id
     """
 
@@ -75,7 +80,7 @@ def train_embeddings():
     # 4. LOAD EMBEDDING MODEL
     # ==============================
     print("Loading embedding model...")
-    model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+    model = SentenceTransformer(MODEL_NAME)
 
     # ==============================
     # 5. CREATE TEXT EMBEDDING
@@ -100,21 +105,18 @@ def train_embeddings():
     )
 
     # ==============================
-    # 7. APPLY TIME WEIGHTING (CREATED_ON)
+    # 7. STORE FRESHNESS FEATURE FOR THE RANKING LAYER
     # ==============================
     print("Applying time weighting...")
     now_ts = datetime.utcnow().timestamp()
     created_ts = df["created_on"].apply(lambda x: x.timestamp() if pd.notnull(x) else now_ts)
-    # weight = exp(-alpha * age_days)
-    alpha = 0.00001  # small decay
-    age_seconds = now_ts - created_ts
-    time_weights = np.exp(-alpha * age_seconds).values
-    time_weights = time_weights[:, np.newaxis]  # reshape to broadcast
+    age_days = np.maximum(0, (now_ts - created_ts) / 86400)
+    df["freshness_score"] = np.exp(-age_days / 90).astype(float)
 
     # ==============================
     # 8. COMBINE EMBEDDINGS
     # ==============================
-    print("Combining embeddings (text + skills + time)...")
+    print("Combining embeddings (text + skills)...")
     final_embeddings = 0.7 * text_embeddings + 0.3 * skill_embeddings
 
     # FAISS requires float32 contiguous array
@@ -144,6 +146,16 @@ def train_embeddings():
         pickle.dump(df, f)
 
     model.save(os.path.join(MODEL_DIR, "embedding_model"))
+    with open(os.path.join(MODEL_DIR, "model_manifest.json"), "w", encoding="utf-8") as f:
+        json.dump({
+            "model_name": MODEL_NAME,
+            "model_version": MODEL_VERSION,
+            "embedding_dimension": int(dimension),
+            "index_type": "IndexFlatIP",
+            "job_count": int(len(df)),
+            "text_weight": 0.7,
+            "skill_weight": 0.3,
+        }, f, indent=2)
     print("Training finished.")
 
 # ==============================
